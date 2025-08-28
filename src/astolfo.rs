@@ -1,0 +1,109 @@
+use std::{
+    collections::HashMap,
+    env,
+    net::SocketAddr,
+    process,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::{
+    io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::{TcpListener, TcpStream},
+    time::sleep,
+};
+
+enum FemState {
+    Idle,
+    Attacking,
+    Dead,
+}
+
+struct Femboy {
+    addr: SocketAddr,
+    status: FemState,
+}
+
+#[tokio::main]
+async fn main() {
+    let port = env::args().nth(1).unwrap_or_else(|| {
+        println!("Usage: astolfo <PORT>");
+        process::exit(1);
+    });
+    let port: u16 = port.parse().unwrap_or_else(|_err| {
+        println!("[\x1b[91mERR\x1b[0m] Please provide valid port number");
+        process::exit(1);
+    });
+
+    let femtable: Arc<Mutex<HashMap<u16, Femboy>>> = Arc::new(Mutex::new(HashMap::new()));
+    let fem_counter: Arc<Mutex<u16>> = Arc::new(Mutex::new(0));
+
+    let listen_femtable = Arc::clone(&femtable);
+    let listen_fem_counter = Arc::clone(&fem_counter);
+
+    let listen_task = tokio::spawn(async move {
+        let listener = TcpListener::bind(format!("0.0.0.0:{port}"))
+            .await
+            .unwrap_or_else(|err| {
+                println!("[\x1b[91mERR\x1b[0m] Failed to bind address ({err})");
+                process::exit(1);
+            });
+
+        println!("[\x1b[94mINFO\x1b[0m] Listening for femboys on 0.0.0.0:{port}");
+
+        loop {
+            let femboy = match listener.accept().await {
+                Ok((stream, addr)) => (stream, addr),
+                Err(err) => {
+                    println!("[\x1b[91mERR\x1b[0m] Failed to transition a femboy ({err})");
+                    continue;
+                }
+            };
+
+            {
+                let mut femtable = listen_femtable.lock().unwrap_or_else(|_| {
+                    process::exit(1);
+                });
+
+                let mut fem_counter = listen_fem_counter.lock().unwrap_or_else(|_| {
+                    process::exit(1);
+                });
+
+                femtable.insert(
+                    *fem_counter,
+                    Femboy {
+                        addr: femboy.1,
+                        status: FemState::Idle,
+                    },
+                );
+                println!("[\x1b[92mSUCC\x1b[0m] New femboy ID {fem_counter}");
+                *fem_counter += 1;
+            }
+
+            tokio::spawn(async move { handle_femboy(femboy.0).await });
+        }
+    });
+
+    let command_task = tokio::spawn(async move {
+        let mut stdin = BufReader::new(io::stdin());
+        let mut buf = String::new();
+        loop {
+            if let Err(_) = stdin.read_line(&mut buf).await {
+                println!("[\x1b[91mERR\x1b[0m] Failed to read command");
+                continue;
+            }
+
+            let command = buf.trim();
+            println!("Command: {command}");
+            buf.clear();
+        }
+    })
+    .await;
+}
+
+async fn handle_femboy(mut stream: TcpStream) {
+    loop {
+        stream.write_all(b"Hello World").await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+    }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "astolfo"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "astolfo"
+path = "src/astolfo.rs"
+
+[[bin]]
+name = "felix"
+path = "src/felix.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
