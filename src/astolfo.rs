@@ -13,12 +13,14 @@ use tokio::{
     time::sleep,
 };
 
+#[derive(Debug)]
 enum FemState {
     Idle,
     Attacking,
     Dead,
 }
 
+#[derive(Debug)]
 struct Femboy {
     addr: SocketAddr,
     status: FemState,
@@ -93,8 +95,16 @@ async fn main() {
                 continue;
             }
 
-            let command = buf.trim();
-            println!("Command: {command}");
+            let command = buf.trim().to_lowercase();
+
+            if command == "femboys" {
+                let femtable = femtable.lock().unwrap_or_else(|_| {
+                    process::exit(1);
+                });
+
+                println!("{femtable:?}");
+            }
+
             buf.clear();
         }
     })
