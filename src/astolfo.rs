@@ -7,8 +7,9 @@ use std::{
     time::Duration,
 };
 
+use astolfo::CMD;
 use tokio::{
-    io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
     time::sleep,
 };
@@ -109,6 +110,49 @@ async fn main() {
         }
     })
     .await;
+}
+
+async fn heartbeat(stream: Arc<Mutex<TcpStream>>) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(15));
+    let config = bincode::config::standard();
+    let hello = bincode::encode_to_vec(CMD::hello, config).unwrap_or_else(|_| {
+        process::exit(1);
+    });
+
+    loop {
+        ticker.tick().await;
+        let mut stream = stream.lock().unwrap_or_else(|_| {
+            panic!("Mutex gone :(");
+        });
+
+        stream.write_u16(hello.len() as u16).await.unwrap_or_else(|_| {
+            panic!("Client disconnected :(");
+        });
+        
+        stream.write_all(hello.as_slice()).await.unwrap_or_else(|_| {
+            panic!("Client disconnected :(");
+        });
+
+        let size = stream.read_u16().await.unwrap_or_else(|_| {
+            panic!("uh oh :(");
+        });
+
+        let mut buf = vec![0u8; size as usize];
+        stream.read_exact(buf.as_mut_slice()).await.unwrap_or_else(|_| {
+            panic!("uh oh :(");
+        });
+
+        match bincode::decode_from_slice::<CMD, _>(buf.as_slice(), config) {
+            Ok(cmd) => {
+                if let CMD::hello = cmd.0 {
+                    println!("Got hello back");
+                }
+            },
+            Err(_) => {
+                println!("Did not get hello back");
+            }
+        };
+    }
 }
 
 async fn handle_femboy(mut stream: TcpStream) {
