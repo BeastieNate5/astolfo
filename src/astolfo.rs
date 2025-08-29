@@ -154,6 +154,8 @@ async fn heartbeat(stream: Arc<tokio::sync::Mutex<TcpStream>>) {
                 panic!("uh oh :(");
             });
 
+        println!("Size: {size}");
+
         match bincode::decode_from_slice::<CMD, _>(buf.as_slice(), config) {
             Ok(cmd) => {
                 if let CMD::hello = cmd.0 {

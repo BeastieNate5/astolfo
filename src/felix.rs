@@ -1,4 +1,4 @@
-use std::{env, io::Read, net::TcpStream, process};
+use std::{env, io::{self, Read, Write}, net::TcpStream, process};
 
 use astolfo::CMD;
 
@@ -36,10 +36,23 @@ fn main() {
             Ok((cmd, _)) => match cmd {
                 CMD::hello => {
                     println!("Got hello");
+                    send_hello(&mut stream).unwrap();
                 }
                 _ => {}
             },
             Err(_) => {}
         }
     }
+}
+
+fn send_hello(stream: &mut TcpStream) -> io::Result<()> {
+    let config = bincode::config::standard();
+    let hello = bincode::encode_to_vec(CMD::hello, config).map_err(|err| {
+        io::Error::new(io::ErrorKind::InvalidData, err)
+    })?;
+    
+    let size = &(hello.len() as u16).to_be_bytes();
+    stream.write_all(size)?;
+    stream.write_all(hello.as_slice())?;
+    Ok(())
 }
