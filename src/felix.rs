@@ -1,4 +1,4 @@
-use std::{env, io::{self, Read, Write}, net::TcpStream, process};
+use std::{env, io::{self, Read, Write}, net::TcpStream, process::{self, exit}};
 
 use astolfo::CMD;
 
@@ -35,8 +35,10 @@ fn main() {
         match cmd {
             Ok((cmd, _)) => match cmd {
                 CMD::hello => {
-                    println!("Got hello");
-                    send_hello(&mut stream).unwrap();
+                    if let Err(_) = send_hello(&mut stream) {
+                        println!("[\x1b[91mERR\x1b[0m] Lost connection to astolfo");
+                        process::exit(1);
+                    }
                 }
                 _ => {}
             },

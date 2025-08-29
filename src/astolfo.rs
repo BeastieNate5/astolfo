@@ -85,7 +85,8 @@ async fn main() {
 
             let stream = Arc::new(tokio::sync::Mutex::new(femboy.0));
             let heartbeat_stream = Arc::clone(&stream);
-            tokio::spawn(async move { heartbeat(heartbeat_stream).await });
+            let handle_stream = Arc::clone(&stream);
+            tokio::spawn(async move { heartbeat(fem_counter, heartbeat_stream).await });
             //tokio::spawn(async move { handle_femboy(femboy.0).await });
         }
     });
@@ -115,7 +116,7 @@ async fn main() {
     .await;
 }
 
-async fn heartbeat(stream: Arc<tokio::sync::Mutex<TcpStream>>) {
+async fn heartbeat(id: u16, stream: Arc<tokio::sync::Mutex<TcpStream>>) {
     let mut ticker = tokio::time::interval(Duration::from_secs(5));
     let config = bincode::config::standard();
     let hello = bincode::encode_to_vec(CMD::hello, config).unwrap_or_else(|_| {
@@ -166,12 +167,5 @@ async fn heartbeat(stream: Arc<tokio::sync::Mutex<TcpStream>>) {
                 println!("Did not get hello back");
             }
         };
-    }
-}
-
-async fn handle_femboy(mut stream: TcpStream) {
-    loop {
-        stream.write_all(b"Hello World").await.unwrap();
-        sleep(Duration::from_secs(1)).await;
     }
 }
