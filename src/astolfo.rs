@@ -83,7 +83,10 @@ async fn main() {
                 *fem_counter += 1;
             }
 
-            tokio::spawn(async move { handle_femboy(femboy.0).await });
+            let stream = Arc::new(tokio::sync::Mutex::new(femboy.0));
+            let heartbeat_stream = Arc::clone(&stream);
+            tokio::spawn(async move { heartbeat(heartbeat_stream).await });
+            //tokio::spawn(async move { handle_femboy(femboy.0).await });
         }
     });
 
@@ -112,8 +115,8 @@ async fn main() {
     .await;
 }
 
-async fn heartbeat(stream: Arc<Mutex<TcpStream>>) {
-    let mut ticker = tokio::time::interval(Duration::from_secs(15));
+async fn heartbeat(stream: Arc<tokio::sync::Mutex<TcpStream>>) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(5));
     let config = bincode::config::standard();
     let hello = bincode::encode_to_vec(CMD::hello, config).unwrap_or_else(|_| {
         process::exit(1);
@@ -121,33 +124,42 @@ async fn heartbeat(stream: Arc<Mutex<TcpStream>>) {
 
     loop {
         ticker.tick().await;
-        let mut stream = stream.lock().unwrap_or_else(|_| {
-            panic!("Mutex gone :(");
-        });
+        let mut stream = stream.lock().await;
 
-        stream.write_u16(hello.len() as u16).await.unwrap_or_else(|_| {
-            panic!("Client disconnected :(");
-        });
-        
-        stream.write_all(hello.as_slice()).await.unwrap_or_else(|_| {
-            panic!("Client disconnected :(");
-        });
+        stream
+            .write_u16(hello.len() as u16)
+            .await
+            .unwrap_or_else(|_| {
+                panic!("Client disconnected :(");
+            });
+
+        stream
+            .write_all(hello.as_slice())
+            .await
+            .unwrap_or_else(|_| {
+                panic!("Client disconnected :(");
+            });
+
+        println!("Sent hello");
 
         let size = stream.read_u16().await.unwrap_or_else(|_| {
             panic!("uh oh :(");
         });
 
         let mut buf = vec![0u8; size as usize];
-        stream.read_exact(buf.as_mut_slice()).await.unwrap_or_else(|_| {
-            panic!("uh oh :(");
-        });
+        stream
+            .read_exact(buf.as_mut_slice())
+            .await
+            .unwrap_or_else(|_| {
+                panic!("uh oh :(");
+            });
 
         match bincode::decode_from_slice::<CMD, _>(buf.as_slice(), config) {
             Ok(cmd) => {
                 if let CMD::hello = cmd.0 {
                     println!("Got hello back");
                 }
-            },
+            }
             Err(_) => {
                 println!("Did not get hello back");
             }

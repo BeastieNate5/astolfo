@@ -6,4 +6,3 @@ pub enum CMD {
     attack(String),
     stop,
 }
-
