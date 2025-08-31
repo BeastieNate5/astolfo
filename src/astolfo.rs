@@ -102,6 +102,7 @@ async fn main() {
 }
 
 async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStream) {
+
     let config = bincode::config::standard();
     loop {
         let size = stream.read_u16().await.unwrap_or_else(|_| {
@@ -138,5 +139,6 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
                 panic!("uh oh");
             })
         }
+
     }
 }
