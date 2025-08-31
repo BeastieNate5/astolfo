@@ -1,6 +1,6 @@
-use std::{env, io::Read, net::TcpStream, process};
+use std::{env, io::{Read, Write}, net::TcpStream, process, thread::sleep, time::Duration};
 
-use astolfo::CMD;
+use astolfo::FemState;
 
 fn main() {
     let address = env::args().nth(1).unwrap();
@@ -12,6 +12,19 @@ fn main() {
     });
 
     loop {
+        let hello_msg = b"meow";
+        let hello_size : [u8; 2] = (hello_msg.len() as u16).to_be_bytes();
+
+        stream.write_all(&hello_size).unwrap_or_else(|_| {
+            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
+            process::exit(1);
+        });
+
+        stream.write_all(hello_msg).unwrap_or_else(|_| {
+            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
+            process::exit(1);
+        });
+
         let mut size_buf = [0u8; 2];
         stream.read_exact(&mut size_buf).unwrap_or_else(|_| {
             eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
@@ -20,26 +33,29 @@ fn main() {
         println!("Got size");
 
         let size = u16::from_be_bytes(size_buf);
-        let mut cmd = vec![0u8; size as usize];
+        let mut state = vec![0u8; size as usize];
         println!("Size: {size}");
 
-        stream.read_exact(cmd.as_mut_slice()).unwrap_or_else(|_| {
+        stream.read_exact(state.as_mut_slice()).unwrap_or_else(|_| {
             eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
             process::exit(1);
         });
         println!("Got cmd");
 
-        let cmd = bincode::decode_from_slice::<CMD, _>(cmd.as_slice(), config);
+        let cmd = bincode::decode_from_slice::<FemState, _>(state.as_slice(), config);
         println!("decoded cmd");
 
         match cmd {
             Ok((cmd, _)) => match cmd {
-                CMD::hello => {
-                    println!("Got hello");
+                FemState::Idle => {
+                    println!("CMD: Idle");
                 }
                 _ => {}
             },
             Err(_) => {}
         }
+
+        sleep(Duration::from_secs(3));
+
     }
 }

