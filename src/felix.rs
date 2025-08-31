@@ -60,14 +60,3 @@ fn main() {
     }
 }
 
-fn send_hello(stream: &mut TcpStream) -> io::Result<()> {
-    let config = bincode::config::standard();
-    let hello = bincode::encode_to_vec(CMD::hello, config).map_err(|err| {
-        io::Error::new(io::ErrorKind::InvalidData, err)
-    })?;
-    
-    let size = &(hello.len() as u16).to_be_bytes();
-    stream.write_all(size)?;
-    stream.write_all(hello.as_slice())?;
-    Ok(())
-}
