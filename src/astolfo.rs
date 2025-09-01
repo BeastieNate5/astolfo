@@ -1,10 +1,5 @@
 use std::{
-    collections::HashMap,
-    env,
-    net::SocketAddr,
-    process,
-    sync::{Arc, Mutex},
-    time::SystemTime
+    collections::HashMap, env, io::Write, net::SocketAddr, process, sync::{Arc, Mutex}, time::SystemTime
 };
 
 use astolfo::FemState;
@@ -13,9 +8,6 @@ use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
-
-
-
 
 #[derive(Debug)]
 struct Femboy {
@@ -76,16 +68,23 @@ async fn main() {
         }
     });
 
+    let command_femtable = Arc::clone(&femtable);
+
     let command_task = tokio::spawn(async move {
         let mut stdin = BufReader::new(io::stdin());
         let mut buf = String::new();
         loop {
+            print!("> ");
+            std::io::stdout().flush().ok();
             if let Err(_) = stdin.read_line(&mut buf).await {
                 println!("[\x1b[91mERR\x1b[0m] Failed to read command");
                 continue;
             }
 
-            let command = buf.trim().to_lowercase();
+            let mut command_string = buf.trim().split(' ');
+            let command = command_string.next().unwrap_or_else(|| {
+                ""
+            });
 
             if command == "femboys" {
                 let femtable = femtable.lock().unwrap_or_else(|_| {
@@ -93,6 +92,32 @@ async fn main() {
                 });
 
                 println!("{femtable:?}");
+            }
+            else if command == "attack" {
+                let target = command_string.next();
+                if let Some(target) = target {
+                    let mut table = command_femtable.lock().unwrap();
+                    for (_,v) in table.iter_mut() {
+                        v.state = FemState::Attacking(target.to_owned());
+                    }
+
+                    println!("[\x1b[92mSUCC\x1b[0m] Set bot(s) to attack mode, target {target}");
+                }
+                else {
+                    println!("[\x1b[91mERR\x1b[0m] Invalid target");
+                }
+            }
+            else if command == "stop" {
+                let mut table = command_femtable.lock().unwrap();
+                for (_,v) in table.iter_mut() {
+                    v.state = FemState::Idle;
+                }
+                println!("[\x1b[92mSUCC\x1b[0m] Set bot(s) to idle mode");
+            }
+            else {
+                if command != "" {
+                    println!("[\x1b[91mERR\x1b[0m] Invalid command");
+                }
             }
 
             buf.clear();

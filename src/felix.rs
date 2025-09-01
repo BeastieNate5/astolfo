@@ -48,8 +48,13 @@ fn main() {
         match cmd {
             Ok((cmd, _)) => match cmd {
                 FemState::Idle => {
-                    println!("CMD: Idle");
-                }
+                    println!("CMD: Idle\n");
+                },
+                
+                FemState::Attacking(addr) => {
+                    println!("CMD: Attack ({addr})\n")
+                },
+
                 _ => {}
             },
             Err(_) => {}
