@@ -14,3 +14,4 @@ path = "src/felix.rs"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 bincode = "2.0.1"
+reqwest = { version = "=0.10.10", features = ["blocking"]}
