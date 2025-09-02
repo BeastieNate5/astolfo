@@ -7,9 +7,3 @@ pub enum FemState {
     Dead,
 }
 
-#[derive(Encode, Decode)]
-pub enum CMD {
-    hello,
-    attack(String),
-    stop,
-}
