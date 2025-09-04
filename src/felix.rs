@@ -4,7 +4,10 @@ use astolfo::BotState;
 use rand::Rng;
 
 fn main() {
-    let address = env::args().nth(1).unwrap();
+    let mut args = env::args();
+    let address = args.nth(1).unwrap();
+    let thread_count = args.next().unwrap();
+    let thread_count : u8 = thread_count.parse().unwrap();
     let config = bincode::config::standard();
 
     let mut stream = TcpStream::connect(address).unwrap_or_else(|err| {
@@ -17,7 +20,7 @@ fn main() {
     let mut prev_state = BotState::Idle;
     let working_state = Arc::new(RwLock::new(BotState::Idle));
 
-    for _ in 0..4 {
+    for _ in 0..=thread_count {
         let thread_state = Arc::clone(&working_state);
         thread::spawn(move || {
             let client = reqwest::blocking::Client::new();
